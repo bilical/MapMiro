@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MapKit
+import Combine
 
 // 导入自定义视图和工具类
 // 注意：在实际项目中，这些类应该已经可以被访问，因为它们在同一个模块中
@@ -184,7 +185,8 @@ class MapUtils {
     }
     
     // 创建相同形状的多边形，保持原始形状但移动到新的中心点
-    static func createSameShapePolygon(originalPoints: [CLLocationCoordinate2D], newCenter: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+    // 可以选择是否保持原始大小或根据面积比例缩放
+    static func createSameShapePolygon(originalPoints: [CLLocationCoordinate2D], newCenter: CLLocationCoordinate2D, scale: Double = 1.0) -> [CLLocationCoordinate2D] {
         // 如果点数量少于3个，则无法形成多边形
         guard originalPoints.count >= 3 else { return [] }
         
@@ -194,11 +196,11 @@ class MapUtils {
         // 创建新的多边形点
         var newPoints: [CLLocationCoordinate2D] = []
         
-        // 对每个点进行平移
+        // 对每个点进行平移和缩放
         for point in originalPoints {
             // 计算点相对于原始中心的偏移量（经度和纬度）
-            let latOffset = point.latitude - originalCenter.latitude
-            let lonOffset = point.longitude - originalCenter.longitude
+            let latOffset = (point.latitude - originalCenter.latitude) * scale
+            let lonOffset = (point.longitude - originalCenter.longitude) * scale
             
             // 将偏移量应用到新的中心点
             let newLat = newCenter.latitude + latOffset
@@ -282,6 +284,133 @@ class MapUtils {
     }
 }
 
+// 固定位置的多边形覆盖物视图，不随地图移动而移动，但会随地图缩放而缩放
+struct FixedPolygonOverlay: View {
+    // 多边形的点坐标数组
+    var points: [CLLocationCoordinate2D]
+    
+    // 多边形的填充颜色
+    var fillColor: Color = .red.opacity(0.3)
+    
+    // 多边形的边框颜色
+    var strokeColor: Color = .red
+    
+    // 多边形的边框宽度
+    var lineWidth: CGFloat = 2.0
+    
+    // 地图视图的尺寸
+    var mapSize: CGSize
+    
+    // 地图的当前缩放级别（span）
+    var mapSpan: MKCoordinateSpan
+    
+    // 基准缩放级别，用于计算缩放比例
+    var baseSpan: MKCoordinateSpan = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    
+    var body: some View {
+        // 如果点数量不足3个，则不绘制多边形
+        if points.count < 3 {
+            EmptyView()
+        } else {
+            // 绘制多边形
+            Path { path in
+                // 计算多边形的中心点
+                let center = MapUtils.calculatePolygonCenter(points)
+                
+                // 计算多边形的平均半径（简化处理）
+                var totalDistance: Double = 0
+                for point in points {
+                    let latDiff = point.latitude - center.latitude
+                    let lonDiff = point.longitude - center.longitude
+                    totalDistance += sqrt(latDiff * latDiff + lonDiff * lonDiff)
+                }
+                let avgRadius = totalDistance / Double(points.count)
+                
+                // 计算地图缩放比例（相对于基准缩放级别）
+                let zoomRatio = baseSpan.longitudeDelta / mapSpan.longitudeDelta
+                
+                // 计算多边形的缩放比例，考虑地图的缩放级别
+                let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius * zoomRatio
+                
+                // 移动到第一个点
+                let firstPoint = points[0]
+                let firstLatOffset = firstPoint.latitude - center.latitude
+                let firstLonOffset = firstPoint.longitude - center.longitude
+                let firstX = mapSize.width / 2 + firstLonOffset * scale
+                let firstY = mapSize.height / 2 - firstLatOffset * scale
+                path.move(to: CGPoint(x: firstX, y: firstY))
+                
+                // 连接其余的点
+                for i in 1..<points.count {
+                    let point = points[i]
+                    
+                    // 计算相对于中心点的偏移
+                    let latOffset = point.latitude - center.latitude
+                    let lonOffset = point.longitude - center.longitude
+                    
+                    // 缩放并平移到地图中心
+                    let x = mapSize.width / 2 + lonOffset * scale
+                    let y = mapSize.height / 2 - latOffset * scale
+                    
+                    path.addLine(to: CGPoint(x: x, y: y))
+                }
+                
+                // 闭合路径
+                path.closeSubpath()
+            }
+            .fill(fillColor)
+            .overlay(
+                Path { path in
+                    // 计算多边形的中心点
+                    let center = MapUtils.calculatePolygonCenter(points)
+                    
+                    // 计算多边形的平均半径（简化处理）
+                    var totalDistance: Double = 0
+                    for point in points {
+                        let latDiff = point.latitude - center.latitude
+                        let lonDiff = point.longitude - center.longitude
+                        totalDistance += sqrt(latDiff * latDiff + lonDiff * lonDiff)
+                    }
+                    let avgRadius = totalDistance / Double(points.count)
+                    
+                    // 计算地图缩放比例（相对于基准缩放级别）
+                    let zoomRatio = baseSpan.longitudeDelta / mapSpan.longitudeDelta
+                    
+                    // 计算多边形的缩放比例，考虑地图的缩放级别
+                    let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius * zoomRatio
+                    
+                    // 移动到第一个点
+                    let firstPoint = points[0]
+                    let firstLatOffset = firstPoint.latitude - center.latitude
+                    let firstLonOffset = firstPoint.longitude - center.longitude
+                    let firstX = mapSize.width / 2 + firstLonOffset * scale
+                    let firstY = mapSize.height / 2 - firstLatOffset * scale
+                    path.move(to: CGPoint(x: firstX, y: firstY))
+                    
+                    // 连接其余的点
+                    for i in 1..<points.count {
+                        let point = points[i]
+                        
+                        // 计算相对于中心点的偏移
+                        let latOffset = point.latitude - center.latitude
+                        let lonOffset = point.longitude - center.longitude
+                        
+                        // 缩放并平移到地图中心
+                        let x = mapSize.width / 2 + lonOffset * scale
+                        let y = mapSize.height / 2 - latOffset * scale
+                        
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                    
+                    // 闭合路径
+                    path.closeSubpath()
+                }
+                .stroke(strokeColor, lineWidth: lineWidth)
+            )
+        }
+    }
+}
+
 struct ContentView: View {
     // 状态变量，用于存储上方地图的区域
     @State private var topRegion = MKCoordinateRegion(
@@ -316,6 +445,9 @@ struct ContentView: View {
     
     // 状态变量，用于存储搜索文本
     @State private var searchText = ""
+    
+    // 状态变量，用于存储下方地图的初始中心点
+    @State private var bottomMapInitialCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
     
     var body: some View {
         GeometryReader { geometry in
@@ -415,7 +547,7 @@ struct ContentView: View {
                         if drawnPoints.count >= 3 {
                             calculatedArea = MapUtils.calculatePolygonArea(drawnPoints)
                             
-                            // 创建相同形状的多边形
+                            // 创建相同形状的多边形，固定在下方地图中央
                             equalAreaPoints = MapUtils.createSameShapePolygon(
                                 originalPoints: drawnPoints,
                                 newCenter: bottomRegion.center
@@ -486,20 +618,24 @@ struct ContentView: View {
                         Map(coordinateRegion: $bottomRegion)
                             .onAppear {
                                 bottomMapSize = mapGeometry.size
+                                // 保存初始中心点
+                                bottomMapInitialCenter = bottomRegion.center
                             }
                             .onChange(of: mapGeometry.size) { newSize in
                                 bottomMapSize = newSize
                             }
+                            // 使用id修饰符来监听地图缩放级别变化
+                            .id("\(bottomRegion.span.latitudeDelta),\(bottomRegion.span.longitudeDelta)")
                     }
                     
-                    // 绘制等面积多边形
+                    // 绘制固定位置的多边形
                     if !equalAreaPoints.isEmpty {
-                        PolygonOverlay(
+                        FixedPolygonOverlay(
                             points: equalAreaPoints,
                             fillColor: .purple.opacity(0.3),
                             strokeColor: .purple,
-                            region: bottomRegion,
-                            mapSize: bottomMapSize
+                            mapSize: bottomMapSize,
+                            mapSpan: bottomRegion.span
                         )
                     }
                 }
@@ -512,7 +648,7 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    Text("形状: 相同")
+                    Text("形状: 固定且随缩放变化")
                         .font(.caption)
                 }
                 .padding(.horizontal)
