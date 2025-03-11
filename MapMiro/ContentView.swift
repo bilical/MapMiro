@@ -486,13 +486,22 @@ struct ContentView: View {
                 ZStack {
                     // 使用GeometryReader获取地图视图的尺寸
                     GeometryReader { mapGeometry in
-                        Map(coordinateRegion: $topRegion)
-                            .onAppear {
-                                topMapSize = mapGeometry.size
-                            }
-                            .onChange(of: mapGeometry.size) { newSize in
-                                topMapSize = newSize
-                            }
+                        Map(initialPosition: .region(topRegion)) {
+                            // 这里可以添加地图标记等内容
+                        }
+                        .onAppear {
+                            topMapSize = mapGeometry.size
+                        }
+                        .onChange(of: mapGeometry.size) { newSize in
+                            topMapSize = newSize
+                        }
+                        .onMapCameraChange { context in
+                            // 更新topRegion以反映地图的当前位置
+                            topRegion = MKCoordinateRegion(
+                                center: context.region.center,
+                                span: context.region.span
+                            )
+                        }
                     }
                     
                     // 绘制多边形
@@ -593,7 +602,18 @@ struct ContentView: View {
                     
                     Button(action: {
                         // 同步两个地图的比例尺
-                        bottomRegion.span = topRegion.span
+                        bottomRegion = MKCoordinateRegion(
+                            center: bottomRegion.center,
+                            span: topRegion.span
+                        )
+                        
+                        // 如果有多边形，更新多边形以适应新的缩放级别
+                        if !drawnPoints.isEmpty && drawnPoints.count >= 3 {
+                            equalAreaPoints = MapUtils.createSameShapePolygon(
+                                originalPoints: drawnPoints,
+                                newCenter: bottomRegion.center
+                            )
+                        }
                     }) {
                         Image(systemName: "arrow.up.arrow.down")
                             .padding()
@@ -615,17 +635,43 @@ struct ContentView: View {
                 ZStack {
                     // 使用GeometryReader获取地图视图的尺寸
                     GeometryReader { mapGeometry in
-                        Map(coordinateRegion: $bottomRegion)
-                            .onAppear {
-                                bottomMapSize = mapGeometry.size
-                                // 保存初始中心点
-                                bottomMapInitialCenter = bottomRegion.center
+                        Map(initialPosition: .region(bottomRegion)) {
+                            // 这里可以添加地图标记等内容
+                        }
+                        .onAppear {
+                            bottomMapSize = mapGeometry.size
+                            // 保存初始中心点
+                            bottomMapInitialCenter = bottomRegion.center
+                        }
+                        .onChange(of: mapGeometry.size) { newSize in
+                            bottomMapSize = newSize
+                        }
+                        // 使用id修饰符来监听地图缩放级别变化
+                        .id("\(bottomRegion.span.latitudeDelta),\(bottomRegion.span.longitudeDelta)")
+                        .onMapCameraChange { context in
+                            // 更新bottomRegion以反映地图的当前位置
+                            let newRegion = MKCoordinateRegion(
+                                center: context.region.center,
+                                span: context.region.span
+                            )
+                            
+                            // 只有当span发生变化时才更新，避免无限循环
+                            if abs(bottomRegion.span.latitudeDelta - newRegion.span.latitudeDelta) > 0.0001 ||
+                               abs(bottomRegion.span.longitudeDelta - newRegion.span.longitudeDelta) > 0.0001 {
+                                bottomRegion = newRegion
+                                
+                                // 如果有多边形，更新多边形以适应新的缩放级别
+                                if !drawnPoints.isEmpty && drawnPoints.count >= 3 {
+                                    equalAreaPoints = MapUtils.createSameShapePolygon(
+                                        originalPoints: drawnPoints,
+                                        newCenter: newRegion.center
+                                    )
+                                }
+                            } else {
+                                // 如果只是位置变化，只更新中心点
+                                bottomRegion.center = newRegion.center
                             }
-                            .onChange(of: mapGeometry.size) { newSize in
-                                bottomMapSize = newSize
-                            }
-                            // 使用id修饰符来监听地图缩放级别变化
-                            .id("\(bottomRegion.span.latitudeDelta),\(bottomRegion.span.longitudeDelta)")
+                        }
                     }
                     
                     // 绘制固定位置的多边形
