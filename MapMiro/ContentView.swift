@@ -183,6 +183,56 @@ class MapUtils {
         }
     }
     
+    // 创建相同形状的多边形，保持原始形状但移动到新的中心点
+    static func createSameShapePolygon(originalPoints: [CLLocationCoordinate2D], newCenter: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+        // 如果点数量少于3个，则无法形成多边形
+        guard originalPoints.count >= 3 else { return [] }
+        
+        // 计算原始多边形的中心点
+        let originalCenter = calculatePolygonCenter(originalPoints)
+        
+        // 创建新的多边形点
+        var newPoints: [CLLocationCoordinate2D] = []
+        
+        // 对每个点进行平移
+        for point in originalPoints {
+            // 计算点相对于原始中心的偏移量（经度和纬度）
+            let latOffset = point.latitude - originalCenter.latitude
+            let lonOffset = point.longitude - originalCenter.longitude
+            
+            // 将偏移量应用到新的中心点
+            let newLat = newCenter.latitude + latOffset
+            let newLon = newCenter.longitude + lonOffset
+            
+            // 添加新的点
+            newPoints.append(CLLocationCoordinate2D(latitude: newLat, longitude: newLon))
+        }
+        
+        return newPoints
+    }
+    
+    // 计算多边形的中心点
+    static func calculatePolygonCenter(_ points: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D {
+        // 如果点数量为0，返回默认值
+        guard !points.isEmpty else {
+            return CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        }
+        
+        // 计算所有点的平均值
+        var sumLat: Double = 0
+        var sumLon: Double = 0
+        
+        for point in points {
+            sumLat += point.latitude
+            sumLon += point.longitude
+        }
+        
+        let avgLat = sumLat / Double(points.count)
+        let avgLon = sumLon / Double(points.count)
+        
+        return CLLocationCoordinate2D(latitude: avgLat, longitude: avgLon)
+    }
+    
     // 创建相同面积的多边形
     // 在指定中心点创建一个与给定面积相同的圆形
     static func createEqualAreaCircle(center: CLLocationCoordinate2D, area: Double) -> [CLLocationCoordinate2D] {
@@ -365,10 +415,10 @@ struct ContentView: View {
                         if drawnPoints.count >= 3 {
                             calculatedArea = MapUtils.calculatePolygonArea(drawnPoints)
                             
-                            // 创建等面积多边形
-                            equalAreaPoints = MapUtils.createEqualAreaCircle(
-                                center: bottomRegion.center,
-                                area: calculatedArea
+                            // 创建相同形状的多边形
+                            equalAreaPoints = MapUtils.createSameShapePolygon(
+                                originalPoints: drawnPoints,
+                                newCenter: bottomRegion.center
                             )
                         }
                     }
@@ -446,8 +496,8 @@ struct ContentView: View {
                     if !equalAreaPoints.isEmpty {
                         PolygonOverlay(
                             points: equalAreaPoints,
-                            fillColor: .red.opacity(0.3),
-                            strokeColor: .red,
+                            fillColor: .purple.opacity(0.3),
+                            strokeColor: .purple,
                             region: bottomRegion,
                             mapSize: bottomMapSize
                         )
@@ -462,7 +512,7 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    Text("比例尺: 1:1")
+                    Text("形状: 相同")
                         .font(.caption)
                 }
                 .padding(.horizontal)
