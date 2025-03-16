@@ -144,30 +144,79 @@ class MapUtils {
     static let earthRadius: Double = 6371000.0
     
     // 计算多边形面积（平方米）
-    // 使用球面几何学计算地理多边形的面积
+    // 使用球面几何学计算地理多边形的面积（使用更精确的计算方法）
     static func calculatePolygonArea(_ coordinates: [CLLocationCoordinate2D]) -> Double {
         // 如果点数量少于3个，则无法形成多边形
         guard coordinates.count >= 3 else { return 0 }
         
         var area: Double = 0
+        let n = coordinates.count
         
         // 将经纬度转换为弧度
-        let radianCoordinates: [(lat: Double, lon: Double)] = coordinates.map { coord -> (lat: Double, lon: Double) in
-            return (lat: coord.latitude * .pi / 180, lon: coord.longitude * .pi / 180)
+        let points = coordinates.map { coord -> (lat: Double, lon: Double) in
+            return (
+                lat: coord.latitude * .pi / 180,
+                lon: coord.longitude * .pi / 180
+            )
         }
         
-        // 使用球面多边形面积公式计算
-        for i in 0..<radianCoordinates.count {
-            let j = (i + 1) % radianCoordinates.count
+        // 使用更精确的球面多边形面积公式
+        for i in 0..<n {
+            let j = (i + 1) % n
+            let k = (i + 2) % n
             
-            let p1 = radianCoordinates[i]
-            let p2 = radianCoordinates[j]
+            let p1 = points[i]
+            let p2 = points[j]
+            let p3 = points[k]
             
-            area += (p2.lon - p1.lon) * sin(p1.lat)
+            // 计算球面三角形的面积
+            area += computeSphericalExcess(p1, p2, p3)
         }
         
-        area = abs(area * earthRadius * earthRadius / 2)
+        // 取绝对值并乘以地球半径的平方
+        area = abs(area) * earthRadius * earthRadius
+        
         return area
+    }
+    
+    // 计算球面三角形的超额角（spherical excess）
+    private static func computeSphericalExcess(_ p1: (lat: Double, lon: Double), _ p2: (lat: Double, lon: Double), _ p3: (lat: Double, lon: Double)) -> Double {
+        // 计算边的长度（大圆距离）
+        let a = greatCircleDistance(p1, p2)
+        let b = greatCircleDistance(p2, p3)
+        let c = greatCircleDistance(p3, p1)
+        
+        // 计算半周长
+        let s = (a + b + c) / 2
+        
+        // 使用L'Huilier公式计算球面三角形的超额角
+        let tanQE = sqrt(
+            tan(s/2) *
+            tan((s-a)/2) *
+            tan((s-b)/2) *
+            tan((s-c)/2)
+        )
+        
+        return 4 * atan(tanQE)
+    }
+    
+    // 计算两点间的大圆距离（弧度）
+    private static func greatCircleDistance(_ p1: (lat: Double, lon: Double), _ p2: (lat: Double, lon: Double)) -> Double {
+        let dLon = p2.lon - p1.lon
+        
+        let cosP1Lat = cos(p1.lat)
+        let sinP1Lat = sin(p1.lat)
+        let cosP2Lat = cos(p2.lat)
+        let sinP2Lat = sin(p2.lat)
+        
+        let cosDLon = cos(dLon)
+        let sinDLon = sin(dLon)
+        
+        let a = cosP2Lat * sinDLon
+        let b = cosP1Lat * sinP2Lat - sinP1Lat * cosP2Lat * cosDLon
+        let c = sinP1Lat * sinP2Lat + cosP1Lat * cosP2Lat * cosDLon
+        
+        return atan2(sqrt(a * a + b * b), c)
     }
     
     // 格式化面积显示
@@ -294,6 +343,44 @@ class MapUtils {
         let latitude = region.center.latitude + (region.span.latitudeDelta / 2) - y * region.span.latitudeDelta
         
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+    
+    // 计算多边形的周长（米）
+    static func calculatePolygonPerimeter(_ coordinates: [CLLocationCoordinate2D]) -> Double {
+        guard coordinates.count >= 2 else { return 0 }
+        
+        var perimeter: Double = 0
+        
+        // 计算所有相邻点之间的距离
+        for i in 0..<coordinates.count {
+            let j = (i + 1) % coordinates.count // 循环回到第一个点
+            
+            let p1 = (
+                lat: coordinates[i].latitude * .pi / 180,
+                lon: coordinates[i].longitude * .pi / 180
+            )
+            let p2 = (
+                lat: coordinates[j].latitude * .pi / 180,
+                lon: coordinates[j].longitude * .pi / 180
+            )
+            
+            // 使用大圆距离计算两点之间的距离
+            let distance = greatCircleDistance(p1, p2) * earthRadius
+            perimeter += distance
+        }
+        
+        return perimeter
+    }
+    
+    // 格式化长度显示
+    static func formatLength(_ length: Double) -> String {
+        if length < 1000 {
+            // 小于1千米，显示米
+            return String(format: "%.1f 米", length)
+        } else {
+            // 大于等于1千米，显示千米
+            return String(format: "%.2f 千米", length / 1000)
+        }
     }
 }
 
@@ -758,8 +845,14 @@ struct MapView: View {
                 
                 // 底部信息栏
                 HStack {
-                    Text("面积: \(MapUtils.formatArea(calculatedArea))")
-                        .font(.caption)
+                    HStack(spacing: 8) {
+                        Text("面积: \(MapUtils.formatArea(calculatedArea))")
+                            .font(.caption)
+                        if drawnPoints.count >= 2 {
+                            Text("周长: \(MapUtils.formatLength(MapUtils.calculatePolygonPerimeter(drawnPoints)))")
+                                .font(.caption)
+                        }
+                    }
                     
                     Spacer()
                     
