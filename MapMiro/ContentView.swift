@@ -297,7 +297,7 @@ class MapUtils {
     }
 }
 
-// 固定位置的多边形覆盖物视图，不随地图移动而移动，但会随地图缩放而缩放
+// 固定位置的多边形覆盖物视图
 struct FixedPolygonOverlay: View {
     // 多边形的点坐标数组
     var points: [CLLocationCoordinate2D]
@@ -317,8 +317,22 @@ struct FixedPolygonOverlay: View {
     // 地图的当前缩放级别（span）
     var mapSpan: MKCoordinateSpan
     
-    // 基准缩放级别，用于计算缩放比例
-    var baseSpan: MKCoordinateSpan = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    // 将地理坐标转换为屏幕坐标
+    private func projectToScreen(_ coordinate: CLLocationCoordinate2D) -> CGPoint {
+        // 计算经纬度与中心点的差值
+        let latitudeDelta = mapSpan.latitudeDelta
+        let longitudeDelta = mapSpan.longitudeDelta
+        
+        // 将坐标转换为相对于地图中心的偏移量（-1到1的范围）
+        let x = (coordinate.longitude - (points[0].longitude - longitudeDelta / 2)) / longitudeDelta
+        let y = (coordinate.latitude - (points[0].latitude - latitudeDelta / 2)) / latitudeDelta
+        
+        // 转换为屏幕坐标
+        return CGPoint(
+            x: x * mapSize.width,
+            y: (1 - y) * mapSize.height
+        )
+    }
     
     var body: some View {
         // 如果点数量不足3个，则不绘制多边形
@@ -327,52 +341,32 @@ struct FixedPolygonOverlay: View {
         } else {
             // 绘制多边形
             Path { path in
-                // 计算多边形的中心点（仅用于定位多边形在屏幕中央）
-                let center = MapUtils.calculatePolygonCenter(points)
+                // 将第一个点投影到屏幕空间
+                let firstPoint = projectToScreen(points[0])
                 
-                // 使用第一个点作为参考点
-                let referencePoint = points[0]
+                // 计算屏幕中心
+                let screenCenter = CGPoint(x: mapSize.width / 2, y: mapSize.height / 2)
                 
-                // 计算参考点到中心点的偏移量
-                let refToCenterLatOffset = center.latitude - referencePoint.latitude
-                let refToCenterLonOffset = center.longitude - referencePoint.longitude
+                // 计算第一个点相对于屏幕中心的偏移
+                let firstOffsetX = firstPoint.x - screenCenter.x
+                let firstOffsetY = firstPoint.y - screenCenter.y
                 
-                // 计算多边形的平均半径（简化处理）
-                var totalDistance: Double = 0
-                for point in points {
-                    let latDiff = point.latitude - center.latitude
-                    let lonDiff = point.longitude - center.longitude
-                    totalDistance += sqrt(latDiff * latDiff + lonDiff * lonDiff)
-                }
-                let avgRadius = totalDistance / Double(points.count)
-                
-                // 计算固定的缩放比例，不考虑地图的缩放级别
-                let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius
-                
-                // 计算屏幕中心点
-                let screenCenterX = mapSize.width / 2
-                let screenCenterY = mapSize.height / 2
-                
-                // 计算参考点在屏幕上的位置（使多边形中心位于屏幕中央）
-                let referenceX = screenCenterX - refToCenterLonOffset * scale
-                let referenceY = screenCenterY + refToCenterLatOffset * scale
-                
-                // 移动到第一个点（参考点）
-                path.move(to: CGPoint(x: referenceX, y: referenceY))
+                // 移动到第一个点
+                path.move(to: CGPoint(
+                    x: screenCenter.x + firstOffsetX,
+                    y: screenCenter.y + firstOffsetY
+                ))
                 
                 // 连接其余的点
                 for i in 1..<points.count {
-                    let point = points[i]
+                    let point = projectToScreen(points[i])
+                    let offsetX = point.x - screenCenter.x
+                    let offsetY = point.y - screenCenter.y
                     
-                    // 计算点相对于参考点的偏移量
-                    let latOffset = point.latitude - referencePoint.latitude
-                    let lonOffset = point.longitude - referencePoint.longitude
-                    
-                    // 计算点在屏幕上的位置
-                    let x = referenceX + lonOffset * scale
-                    let y = referenceY - latOffset * scale
-                    
-                    path.addLine(to: CGPoint(x: x, y: y))
+                    path.addLine(to: CGPoint(
+                        x: screenCenter.x + offsetX,
+                        y: screenCenter.y + offsetY
+                    ))
                 }
                 
                 // 闭合路径
@@ -381,52 +375,32 @@ struct FixedPolygonOverlay: View {
             .fill(fillColor)
             .overlay(
                 Path { path in
-                    // 计算多边形的中心点（仅用于定位多边形在屏幕中央）
-                    let center = MapUtils.calculatePolygonCenter(points)
+                    // 将第一个点投影到屏幕空间
+                    let firstPoint = projectToScreen(points[0])
                     
-                    // 使用第一个点作为参考点
-                    let referencePoint = points[0]
+                    // 计算屏幕中心
+                    let screenCenter = CGPoint(x: mapSize.width / 2, y: mapSize.height / 2)
                     
-                    // 计算参考点到中心点的偏移量
-                    let refToCenterLatOffset = center.latitude - referencePoint.latitude
-                    let refToCenterLonOffset = center.longitude - referencePoint.longitude
+                    // 计算第一个点相对于屏幕中心的偏移
+                    let firstOffsetX = firstPoint.x - screenCenter.x
+                    let firstOffsetY = firstPoint.y - screenCenter.y
                     
-                    // 计算多边形的平均半径（简化处理）
-                    var totalDistance: Double = 0
-                    for point in points {
-                        let latDiff = point.latitude - center.latitude
-                        let lonDiff = point.longitude - center.longitude
-                        totalDistance += sqrt(latDiff * latDiff + lonDiff * lonDiff)
-                    }
-                    let avgRadius = totalDistance / Double(points.count)
-                    
-                    // 计算固定的缩放比例，不考虑地图的缩放级别
-                    let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius
-                    
-                    // 计算屏幕中心点
-                    let screenCenterX = mapSize.width / 2
-                    let screenCenterY = mapSize.height / 2
-                    
-                    // 计算参考点在屏幕上的位置（使多边形中心位于屏幕中央）
-                    let referenceX = screenCenterX - refToCenterLonOffset * scale
-                    let referenceY = screenCenterY + refToCenterLatOffset * scale
-                    
-                    // 移动到第一个点（参考点）
-                    path.move(to: CGPoint(x: referenceX, y: referenceY))
+                    // 移动到第一个点
+                    path.move(to: CGPoint(
+                        x: screenCenter.x + firstOffsetX,
+                        y: screenCenter.y + firstOffsetY
+                    ))
                     
                     // 连接其余的点
                     for i in 1..<points.count {
-                        let point = points[i]
+                        let point = projectToScreen(points[i])
+                        let offsetX = point.x - screenCenter.x
+                        let offsetY = point.y - screenCenter.y
                         
-                        // 计算点相对于参考点的偏移量
-                        let latOffset = point.latitude - referencePoint.latitude
-                        let lonOffset = point.longitude - referencePoint.longitude
-                        
-                        // 计算点在屏幕上的位置
-                        let x = referenceX + lonOffset * scale
-                        let y = referenceY - latOffset * scale
-                        
-                        path.addLine(to: CGPoint(x: x, y: y))
+                        path.addLine(to: CGPoint(
+                            x: screenCenter.x + offsetX,
+                            y: screenCenter.y + offsetY
+                        ))
                     }
                     
                     // 闭合路径
