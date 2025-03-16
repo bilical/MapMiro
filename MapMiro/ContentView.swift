@@ -489,43 +489,73 @@ struct ContentView: View {
                 ZStack {
                     // 使用GeometryReader获取地图视图的尺寸
                     GeometryReader { mapGeometry in
-                        Map(initialPosition: .region(topRegion)) {
-                            // 这里可以添加地图标记等内容
+                        ZStack {
+                            Map(initialPosition: .region(topRegion)) {
+                                // 这里可以添加地图标记等内容
+                            }
+                            .onAppear {
+                                topMapSize = mapGeometry.size
+                            }
+                            .onChange(of: mapGeometry.size) { _, newSize in
+                                topMapSize = newSize
+                            }
+                            .onMapCameraChange { context in
+                                // 更新topRegion以反映地图的当前位置
+                                topRegion = MKCoordinateRegion(
+                                    center: context.region.center,
+                                    span: context.region.span
+                                )
+                            }
+                            
+                            // 绘制多边形
+                            if !drawnPoints.isEmpty {
+                                PolygonOverlay(
+                                    points: drawnPoints,
+                                    fillColor: .blue.opacity(0.3),
+                                    strokeColor: .blue,
+                                    region: topRegion,
+                                    mapSize: topMapSize
+                                )
+                            }
+                            
+                            // 绘制点标记
+                            ForEach(0..<drawnPoints.count, id: \.self) { index in
+                                PointMarker(
+                                    coordinate: drawnPoints[index],
+                                    color: .blue,
+                                    region: topRegion,
+                                    mapSize: topMapSize
+                                )
+                            }
                         }
-                        .onAppear {
-                            topMapSize = mapGeometry.size
+                        .contentShape(Rectangle()) // 确保整个区域可以接收手势
+                        .onTapGesture { location in
+                            // 如果在绘制模式，添加点
+                            if isDrawing {
+                                // 将点击位置转换为地图坐标
+                                let tapPoint = CGPoint(x: location.x, y: location.y)
+                                let mapRect = CGRect(origin: .zero, size: topMapSize)
+                                let coordinate = MapUtils.convertPointToCoordinate(
+                                    point: tapPoint,
+                                    mapRect: mapRect,
+                                    region: topRegion
+                                )
+                                
+                                // 添加点
+                                drawnPoints.append(coordinate)
+                                
+                                // 如果有至少3个点，计算面积
+                                if drawnPoints.count >= 3 {
+                                    calculatedArea = MapUtils.calculatePolygonArea(drawnPoints)
+                                    
+                                    // 创建相同形状的多边形，固定在下方地图中央
+                                    equalAreaPoints = MapUtils.createSameShapePolygon(
+                                        originalPoints: drawnPoints,
+                                        newCenter: bottomRegion.center
+                                    )
+                                }
+                            }
                         }
-                        .onChange(of: mapGeometry.size) { _, newSize in
-                            topMapSize = newSize
-                        }
-                        .onMapCameraChange { context in
-                            // 更新topRegion以反映地图的当前位置
-                            topRegion = MKCoordinateRegion(
-                                center: context.region.center,
-                                span: context.region.span
-                            )
-                        }
-                    }
-                    
-                    // 绘制多边形
-                    if !drawnPoints.isEmpty {
-                        PolygonOverlay(
-                            points: drawnPoints,
-                            fillColor: .blue.opacity(0.3),
-                            strokeColor: .blue,
-                            region: topRegion,
-                            mapSize: topMapSize
-                        )
-                    }
-                    
-                    // 绘制点标记
-                    ForEach(0..<drawnPoints.count, id: \.self) { index in
-                        PointMarker(
-                            coordinate: drawnPoints[index],
-                            color: .blue,
-                            region: topRegion,
-                            mapSize: topMapSize
-                        )
                     }
                     
                     // 如果在绘制模式，显示绘制提示
@@ -558,34 +588,6 @@ struct ContentView: View {
                     .position(x: topMapSize.width - 50, y: topMapSize.height - 50)
                 }
                 .frame(height: geometry.size.height * 0.4)
-                .contentShape(Rectangle()) // 确保整个区域可以接收手势
-                .onTapGesture { location in
-                    // 如果在绘制模式，添加点
-                    if isDrawing {
-                        // 将点击位置转换为地图坐标
-                        let tapPoint = CGPoint(x: location.x, y: location.y)
-                        let mapRect = CGRect(origin: .zero, size: topMapSize)
-                        let coordinate = MapUtils.convertPointToCoordinate(
-                            point: tapPoint,
-                            mapRect: mapRect,
-                            region: topRegion
-                        )
-                        
-                        // 添加点
-                        drawnPoints.append(coordinate)
-                        
-                        // 如果有至少3个点，计算面积
-                        if drawnPoints.count >= 3 {
-                            calculatedArea = MapUtils.calculatePolygonArea(drawnPoints)
-                            
-                            // 创建相同形状的多边形，固定在下方地图中央
-                            equalAreaPoints = MapUtils.createSameShapePolygon(
-                                originalPoints: drawnPoints,
-                                newCenter: bottomRegion.center
-                            )
-                        }
-                    }
-                }
                 
                 // 中间控制栏
                 HStack {
@@ -735,7 +737,7 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    Text("形状: 完全相同（全等）")
+                    Text("MapMiro v0.22")
                         .font(.caption)
                 }
                 .padding(.horizontal)
