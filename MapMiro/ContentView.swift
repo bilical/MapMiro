@@ -144,39 +144,108 @@ class MapUtils {
     static let earthRadius: Double = 6371000.0
     
     // 计算多边形面积（平方米）
-    // 使用球面几何学计算地理多边形的面积（使用更精确的计算方法）
+    // 使用球面几何学计算地理多边形的面积
     static func calculatePolygonArea(_ coordinates: [CLLocationCoordinate2D]) -> Double {
         // 如果点数量少于3个，则无法形成多边形
         guard coordinates.count >= 3 else { return 0 }
         
-        var area: Double = 0
-        let n = coordinates.count
+        // 使用球面多边形面积公式
+        var total = 0.0
         
         // 将经纬度转换为弧度
-        let points = coordinates.map { coord -> (lat: Double, lon: Double) in
-            return (
-                lat: coord.latitude * .pi / 180,
-                lon: coord.longitude * .pi / 180
-            )
+        let radianCoordinates = coordinates.map { coord -> (lat: Double, lon: Double) in
+            return (lat: coord.latitude * .pi / 180, lon: coord.longitude * .pi / 180)
         }
         
-        // 使用更精确的球面多边形面积公式
+        // 计算球面多边形面积
+        let n = radianCoordinates.count
+        
+        // 使用球面多边形公式计算
         for i in 0..<n {
             let j = (i + 1) % n
             let k = (i + 2) % n
             
-            let p1 = points[i]
-            let p2 = points[j]
-            let p3 = points[k]
+            let a = radianCoordinates[i]
+            let b = radianCoordinates[j]
             
-            // 计算球面三角形的面积
-            area += computeSphericalExcess(p1, p2, p3)
+            // 计算相邻两点之间的经度差
+            var dLon = b.lon - a.lon
+            
+            // 处理经度跨越180度的情况
+            if dLon > .pi {
+                dLon -= 2 * .pi
+            } else if dLon < -.pi {
+                dLon += 2 * .pi
+            }
+            
+            // 使用球面几何公式计算面积贡献
+            total += dLon * sin(a.lat)
         }
         
-        // 取绝对值并乘以地球半径的平方
-        area = abs(area) * earthRadius * earthRadius
+        // 计算最终面积
+        let area = abs(total) * earthRadius * earthRadius / 2.0
         
         return area
+    }
+    
+    // 计算两点之间的方位角
+    private static func calculateBearing(_ p1: (lat: Double, lon: Double), _ p2: (lat: Double, lon: Double)) -> Double {
+        let y = sin(p2.lon - p1.lon) * cos(p2.lat)
+        let x = cos(p1.lat) * sin(p2.lat) - sin(p1.lat) * cos(p2.lat) * cos(p2.lon - p1.lon)
+        return atan2(y, x)
+    }
+    
+    // 计算球面三角形面积
+    private static func sphericalTriangleArea(_ p1: (lat: Double, lon: Double), _ p2: (lat: Double, lon: Double), _ p3: (lat: Double, lon: Double)) -> Double {
+        // 计算三个点的笛卡尔坐标
+        let v1 = sphericalToCartesian(p1)
+        let v2 = sphericalToCartesian(p2)
+        let v3 = sphericalToCartesian(p3)
+        
+        // 计算三角形的三个边的单位向量
+        let e1 = normalizeVector(crossProduct(v2, v3))
+        let e2 = normalizeVector(crossProduct(v3, v1))
+        let e3 = normalizeVector(crossProduct(v1, v2))
+        
+        // 计算三角形的三个角
+        let angle1 = acos(dotProduct(e2, e3))
+        let angle2 = acos(dotProduct(e3, e1))
+        let angle3 = acos(dotProduct(e1, e2))
+        
+        // 计算球面三角形的面积（球面超额公式）
+        let excessAngle = angle1 + angle2 + angle3 - .pi
+        
+        return excessAngle
+    }
+    
+    // 将球面坐标（纬度、经度）转换为笛卡尔坐标
+    private static func sphericalToCartesian(_ p: (lat: Double, lon: Double)) -> (x: Double, y: Double, z: Double) {
+        let x = cos(p.lat) * cos(p.lon)
+        let y = cos(p.lat) * sin(p.lon)
+        let z = sin(p.lat)
+        return (x, y, z)
+    }
+    
+    // 计算两个向量的点积
+    private static func dotProduct(_ v1: (x: Double, y: Double, z: Double), _ v2: (x: Double, y: Double, z: Double)) -> Double {
+        return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
+    }
+    
+    // 计算两个向量的叉积
+    private static func crossProduct(_ v1: (x: Double, y: Double, z: Double), _ v2: (x: Double, y: Double, z: Double)) -> (x: Double, y: Double, z: Double) {
+        let x = v1.y * v2.z - v1.z * v2.y
+        let y = v1.z * v2.x - v1.x * v2.z
+        let z = v1.x * v2.y - v1.y * v2.x
+        return (x, y, z)
+    }
+    
+    // 归一化向量
+    private static func normalizeVector(_ v: (x: Double, y: Double, z: Double)) -> (x: Double, y: Double, z: Double) {
+        let magnitude = sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+        if magnitude == 0 {
+            return (0, 0, 0)
+        }
+        return (v.x / magnitude, v.y / magnitude, v.z / magnitude)
     }
     
     // 计算球面三角形的超额角（spherical excess）
@@ -846,8 +915,8 @@ struct MapView: View {
                 // 底部信息栏
                 HStack {
                     HStack(spacing: 8) {
-                        Text("面积: \(MapUtils.formatArea(calculatedArea))")
-                            .font(.caption)
+                        //Text("面积: \(MapUtils.formatArea(calculatedArea))")
+                        //    .font(.caption)
                         if drawnPoints.count >= 2 {
                             Text("周长: \(MapUtils.formatLength(MapUtils.calculatePolygonPerimeter(drawnPoints)))")
                                 .font(.caption)
