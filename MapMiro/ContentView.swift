@@ -379,6 +379,40 @@ struct FixedPolygonOverlay: View {
     }
 }
 
+// 缩放按钮组件
+struct ZoomButtons: View {
+    var onZoomIn: () -> Void
+    var onZoomOut: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // 放大按钮
+            Button(action: onZoomIn) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.black)
+                    .background(Color.white)
+                    .clipShape(Circle())
+                    .shadow(radius: 2)
+            }
+            
+            // 缩小按钮
+            Button(action: onZoomOut) {
+                Image(systemName: "minus.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.black)
+                    .background(Color.white)
+                    .clipShape(Circle())
+                    .shadow(radius: 2)
+            }
+        }
+        .padding(8)
+        .background(Color.white.opacity(0.8))
+        .cornerRadius(8)
+        .shadow(radius: 2)
+    }
+}
+
 struct ContentView: View {
     // 状态变量，用于存储上方地图的区域
     @State private var topRegion = MKCoordinateRegion(
@@ -503,6 +537,25 @@ struct ContentView: View {
                             .cornerRadius(8)
                             .position(x: topMapSize.width / 2, y: 20)
                     }
+                    
+                    // 添加缩放按钮
+                    ZoomButtons(
+                        onZoomIn: {
+                            // 放大地图（减小span值）
+                            topRegion.span = MKCoordinateSpan(
+                                latitudeDelta: max(topRegion.span.latitudeDelta * 0.5, 0.001),
+                                longitudeDelta: max(topRegion.span.longitudeDelta * 0.5, 0.001)
+                            )
+                        },
+                        onZoomOut: {
+                            // 缩小地图（增加span值）
+                            topRegion.span = MKCoordinateSpan(
+                                latitudeDelta: min(topRegion.span.latitudeDelta * 2.0, 180.0),
+                                longitudeDelta: min(topRegion.span.longitudeDelta * 2.0, 180.0)
+                            )
+                        }
+                    )
+                    .position(x: topMapSize.width - 50, y: topMapSize.height - 50)
                 }
                 .frame(height: geometry.size.height * 0.4)
                 .contentShape(Rectangle()) // 确保整个区域可以接收手势
@@ -653,6 +706,25 @@ struct ContentView: View {
                             mapSpan: bottomRegion.span
                         )
                     }
+                    
+                    // 添加缩放按钮
+                    ZoomButtons(
+                        onZoomIn: {
+                            // 放大地图（减小span值）
+                            bottomRegion.span = MKCoordinateSpan(
+                                latitudeDelta: max(bottomRegion.span.latitudeDelta * 0.5, 0.001),
+                                longitudeDelta: max(bottomRegion.span.longitudeDelta * 0.5, 0.001)
+                            )
+                        },
+                        onZoomOut: {
+                            // 缩小地图（增加span值）
+                            bottomRegion.span = MKCoordinateSpan(
+                                latitudeDelta: min(bottomRegion.span.latitudeDelta * 2.0, 180.0),
+                                longitudeDelta: min(bottomRegion.span.longitudeDelta * 2.0, 180.0)
+                            )
+                        }
+                    )
+                    .position(x: bottomMapSize.width - 50, y: bottomMapSize.height - 50)
                 }
                 .frame(height: geometry.size.height * 0.4)
                 
