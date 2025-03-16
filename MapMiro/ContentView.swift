@@ -776,35 +776,13 @@ struct MapView: View {
 }
 
 struct ContentView: View {
-    // 状态变量，用于存储当前选中的标签页
-    @State private var selectedTab = 0
-    
     var body: some View {
-        TabView(selection: $selectedTab) {
-            MapView()
-                .tabItem {
-                    Image(systemName: "map")
-                    Text("地图")
-                }
-                .tag(0)
-            
-            FavoritesView()
-                .tabItem {
-                    Image(systemName: "star")
-                    Text("收藏")
-                }
-                .tag(1)
-            
-            SettingsView()
-                .tabItem {
-                    Image(systemName: "gear")
-                    Text("设置")
-                }
-                .tag(2)
-        }
+        MapView() // 移除TabView，暂时只显示地图功能
     }
 }
 
+// 预览代码添加配置
 #Preview {
     ContentView()
+        .environment(\.colorScheme, .light) // 指定预览的颜色方案
 }
