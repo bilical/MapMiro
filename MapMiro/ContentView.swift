@@ -413,7 +413,34 @@ struct ZoomButtons: View {
     }
 }
 
-struct ContentView: View {
+// 收藏视图
+struct FavoritesView: View {
+    var body: some View {
+        VStack {
+            Text("收藏功能将在后续版本实现")
+                .foregroundColor(.gray)
+                .padding()
+            Spacer()
+        }
+        .navigationTitle("收藏")
+    }
+}
+
+// 设置视图
+struct SettingsView: View {
+    var body: some View {
+        VStack {
+            Text("设置功能将在后续版本实现")
+                .foregroundColor(.gray)
+                .padding()
+            Spacer()
+        }
+        .navigationTitle("设置")
+    }
+}
+
+// 地图主视图
+struct MapView: View {
     // 状态变量，用于存储上方地图的区域
     @State private var topRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074), // 北京坐标
@@ -423,7 +450,6 @@ struct ContentView: View {
     // 状态变量，用于存储下方地图的区域
     @State private var bottomRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 31.2397, longitude: 121.4998), // 上海东方明珠坐标
-        //center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), // 纽约坐标
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     
@@ -649,7 +675,7 @@ struct ContentView: View {
                         // 分享功能（暂未实现）
                     }) {
                         Image(systemName: "square.and.arrow.up")
-                            .padding()
+        .padding()
                     }
                 }
                 .padding(.horizontal)
@@ -745,6 +771,36 @@ struct ContentView: View {
                 .background(Color.gray.opacity(0.2))
             }
             .edgesIgnoringSafeArea(.bottom)
+        }
+    }
+}
+
+struct ContentView: View {
+    // 状态变量，用于存储当前选中的标签页
+    @State private var selectedTab = 0
+    
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            MapView()
+                .tabItem {
+                    Image(systemName: "map")
+                    Text("地图")
+                }
+                .tag(0)
+            
+            FavoritesView()
+                .tabItem {
+                    Image(systemName: "star")
+                    Text("收藏")
+                }
+                .tag(1)
+            
+            SettingsView()
+                .tabItem {
+                    Image(systemName: "gear")
+                    Text("设置")
+                }
+                .tag(2)
         }
     }
 }
