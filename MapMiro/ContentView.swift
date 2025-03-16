@@ -152,7 +152,7 @@ class MapUtils {
         var area: Double = 0
         
         // 将经纬度转换为弧度
-        let radianCoordinates = coordinates.map { coord -> (lat: Double, lon: Double) in
+        let radianCoordinates: [(lat: Double, lon: Double)] = coordinates.map { coord -> (lat: Double, lon: Double) in
             return (lat: coord.latitude * .pi / 180, lon: coord.longitude * .pi / 180)
         }
         
@@ -314,7 +314,7 @@ struct FixedPolygonOverlay: View {
         } else {
             // 绘制多边形
             Path { path in
-                // 计算多边形的中心点
+                // 计算多边形的中心点（仅用于定位，不用于形状计算）
                 let center = MapUtils.calculatePolygonCenter(points)
                 
                 // 计算多边形的平均半径（简化处理）
@@ -326,18 +326,20 @@ struct FixedPolygonOverlay: View {
                 }
                 let avgRadius = totalDistance / Double(points.count)
                 
-                // 计算地图缩放比例（相对于基准缩放级别）
-                let zoomRatio = baseSpan.longitudeDelta / mapSpan.longitudeDelta
+                // 计算固定的缩放比例，不考虑地图的缩放级别
+                // 这样可以确保多边形大小不随地图缩放而变化
+                let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius
                 
-                // 计算多边形的缩放比例，考虑地图的缩放级别
-                let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius * zoomRatio
-                
-                // 移动到第一个点
+                // 计算第一个点相对于中心的偏移量
                 let firstPoint = points[0]
                 let firstLatOffset = firstPoint.latitude - center.latitude
                 let firstLonOffset = firstPoint.longitude - center.longitude
+                
+                // 计算第一个点在屏幕上的位置
                 let firstX = mapSize.width / 2 + firstLonOffset * scale
                 let firstY = mapSize.height / 2 - firstLatOffset * scale
+                
+                // 移动到第一个点
                 path.move(to: CGPoint(x: firstX, y: firstY))
                 
                 // 连接其余的点
@@ -361,7 +363,7 @@ struct FixedPolygonOverlay: View {
             .fill(fillColor)
             .overlay(
                 Path { path in
-                    // 计算多边形的中心点
+                    // 计算多边形的中心点（仅用于定位，不用于形状计算）
                     let center = MapUtils.calculatePolygonCenter(points)
                     
                     // 计算多边形的平均半径（简化处理）
@@ -373,18 +375,20 @@ struct FixedPolygonOverlay: View {
                     }
                     let avgRadius = totalDistance / Double(points.count)
                     
-                    // 计算地图缩放比例（相对于基准缩放级别）
-                    let zoomRatio = baseSpan.longitudeDelta / mapSpan.longitudeDelta
+                    // 计算固定的缩放比例，不考虑地图的缩放级别
+                    // 这样可以确保多边形大小不随地图缩放而变化
+                    let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius
                     
-                    // 计算多边形的缩放比例，考虑地图的缩放级别
-                    let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius * zoomRatio
-                    
-                    // 移动到第一个点
+                    // 计算第一个点相对于中心的偏移量
                     let firstPoint = points[0]
                     let firstLatOffset = firstPoint.latitude - center.latitude
                     let firstLonOffset = firstPoint.longitude - center.longitude
+                    
+                    // 计算第一个点在屏幕上的位置
                     let firstX = mapSize.width / 2 + firstLonOffset * scale
                     let firstY = mapSize.height / 2 - firstLatOffset * scale
+                    
+                    // 移动到第一个点
                     path.move(to: CGPoint(x: firstX, y: firstY))
                     
                     // 连接其余的点
@@ -420,7 +424,8 @@ struct ContentView: View {
     
     // 状态变量，用于存储下方地图的区域
     @State private var bottomRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), // 纽约坐标
+        center: CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074), // 北京坐标
+        //center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), // 纽约坐标
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     
@@ -694,7 +699,7 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    Text("形状: 固定且随缩放变化")
+                    Text("形状: 完全相同（全等）")
                         .font(.caption)
                 }
                 .padding(.horizontal)
