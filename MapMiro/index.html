@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>MAPPU</title>
+    <meta name="description" content="A simple tool for comparing geographic sizes.">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="favicon.png" type="image/x-icon">
+    <link href="theme.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js'></script>
+    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css'
+        type='text/css' />
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+
+<body>
+    <!-- Modal content -->
+    <!-- <div id="welcomeModal" class="welcome-modal">
+        <div class="welcome-modal-content">
+            <span class="close">&times;</span>
+            <h1>Welcome to MAPPU, <br>a simple tool for comparing geographic sizes.</h1>
+            <h3>Left side is your reference/input, Right side is the comparison/output. Tap on the polygon button, then
+                tap to create your shape on the map. Double click on the last point, or tap on the right-hand map.
+            </h3>
+            <h3>Pan and zoom on the right-hand map to compare the polygon in different areas. <br>You can use the slider
+                to rotate the polygon.</h3>
+        </div>
+    </div> -->
+    <!-- End Modal Content -->
+    <div class="map-container">
+        <div id="map1"></div>
+        <div id="map2"></div>
+    </div>
+    <div id="top-left-container">
+        <a id="top-left-button" href="https://mapfrappe.com" target="_blank">
+            <img src="logotext.png" alt="MM">
+        </a>
+    </div>
+
+
+    <div id="rotation-slider-container">
+        <input type="range" id="rotation-slider" min="0" max="360" value="0" step="1" />
+    </div>
+    <div id="polygon-stats">
+        <h4>多边形统计</h4>
+        <ul>
+            <li id="perimeter">周长: --</li>
+            <li id="area">面积: --</li>
+        </ul>
+    </div>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZHVueCIsImEiOiJja2UzYW96a2YwNGswMnJwbGJvcnRtejZpIn0.1hCPG-T_q9josI-gyJJUAw';
+
+
+        // Initialize map1 (left map)
+        const map1 = new mapboxgl.Map({
+            container: 'map1',
+            style: 'mapbox://styles/mapbox/streets-v11',
+            center: [116.397525, 39.905801], // 毛主席纪念堂 coordinates
+            zoom: 12,
+            pitchWithRotate: false, // Disable pitching with rotate gesture
+        });
+
+        // Initialize map2 (right map)
+        const map2 = new mapboxgl.Map({
+            container: 'map2',
+            style: 'mapbox://styles/mapbox/streets-v11',
+            center: [114.173941, 22.293095], // 维港星光大道 coordinates
+            zoom: 12,
+            pitchWithRotate: false, // Disable pitching with rotate gesture
+        });
+
+        // Add Mapbox Draw controls to map1
+        const draw = new MapboxDraw({
+            displayControlsDefault: true,
+            controls: {
+                polygon: true, // Enable polygon drawing
+                point: false,
+                line_string: false,
+                trash: true,    // Enable delete functionality
+                combine_features: false,
+                uncombine_features: false
+            }
+        });
+        map1.addControl(draw, 'top-left');
+
+        map1.setMaxPitch(0); // Prevent any tilt
+        map2.setMaxPitch(0); // Prevent any tilt
+
+
+
+        // -----------ROTATION------------
+        // Rotation angle in degrees
+        let rotationAngle = 0;
+
+        // Utility function: Convert degrees to radians
+        function degreesToRadians(degrees) {
+            return (degrees * Math.PI) / 180;
+        }
+
+        // Function to set the rotation angle and redraw the polygon
+        function setRotation(angle) {
+            rotationAngle = angle;
+            renderPolygonCentered(); // Redraw the polygon with the new rotation
+        }
+        // -----------/ROTATION------------
+
+
+
+        // Create and set up a fixed canvas overlay on map2
+        let canvas, context;
+
+        function setupCanvas() {
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.width = map2.getContainer().offsetWidth;
+                canvas.height = map2.getContainer().offsetHeight;
+                canvas.style.position = 'absolute';
+                canvas.style.top = 0;
+                canvas.style.left = 0;
+                canvas.style.pointerEvents = 'none'; // Prevent interactions with the canvas
+                map2.getContainer().appendChild(canvas);
+                context = canvas.getContext('2d');
+            }
+        }
+
+        function calculateCentroid(coordinates) {
+            let x = 0, y = 0, totalPoints = coordinates.length;
+
+            coordinates.forEach(([lng, lat]) => {
+                x += lng;
+                y += lat;
+            });
+
+            return [x / totalPoints, y / totalPoints]; // Return the centroid [lng, lat]
+        }
+
+
+        // Function to render polygons, always centered and scaled
+        function renderPolygonCentered() {
+            if (!context) return;
+
+            const features = draw.getAll(); // Get the current polygon from map1
+            if (!features.features.length) {
+                // Clear the canvas if no polygons exist
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
+            const polygon = features.features[0]; // Use the first polygon for now
+            const coordinates = polygon.geometry.coordinates[0]; // Get the outer ring
+
+            // Clear the canvas
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Calculate the centroid of the polygon
+            const [centroidLng, centroidLat] = calculateCentroid(coordinates);
+
+            // Get the screen center (fixed for rendering)
+            const screenCenter = { x: canvas.width / 2, y: canvas.height / 2 };
+
+            // Convert the rotation angle to radians
+            const angleRad = degreesToRadians(rotationAngle);
+
+            // Calculate the screen-space positions of the polygon vertices relative to the centroid
+            const projectedCentroid = map2.project([centroidLng, centroidLat]);
+
+            context.beginPath();
+            coordinates.forEach(([lng, lat], index) => {
+                // Project each vertex relative to the centroid
+                const point = map2.project([lng, lat]);
+
+                // Calculate offsets relative to the centroid in screen space
+                const offsetX = point.x - projectedCentroid.x;
+                const offsetY = point.y - projectedCentroid.y;
+
+                // Apply rotation around the centroid
+                const rotatedX =
+                    offsetX * Math.cos(angleRad) - offsetY * Math.sin(angleRad);
+                const rotatedY =
+                    offsetX * Math.sin(angleRad) + offsetY * Math.cos(angleRad);
+
+                // Draw the polygon relative to the fixed screen center
+                if (index === 0) {
+                    context.moveTo(screenCenter.x + rotatedX, screenCenter.y + rotatedY);
+                } else {
+                    context.lineTo(screenCenter.x + rotatedX, screenCenter.y + rotatedY);
+                }
+            });
+            context.closePath();
+
+            // Fill the polygon
+            context.fillStyle = 'rgba(136, 136, 136, 0.5)';
+            context.fill();
+
+            // Draw the outline
+            context.strokeStyle = '#000';
+            context.lineWidth = 2;
+            context.stroke();
+        }
+
+
+        // Attach event listeners for polygon updates
+        map1.on('load', () => {
+            setupCanvas();
+            map1.on('draw.create', renderPolygonCentered);
+            map1.on('draw.update', renderPolygonCentered);
+            map1.on('draw.delete', renderPolygonCentered);
+        });
+
+        // Get the slider element
+        // Add an event listener to update rotation dynamically
+        const rotationSlider = document.getElementById('rotation-slider');
+
+        if (!rotationSlider) {
+            console.error('Rotation slider not found');
+        } else {
+            rotationSlider.addEventListener('input', (event) => {
+                const angle = parseInt(event.target.value, 10); // Get the slider value
+                console.log(`Slider value: ${angle}`); // Debug
+                setRotation(angle); // Update the rotation angle
+            });
+        }
+
+
+
+
+        // Redraw the polygon when map2 zooms
+        map2.on('zoom', renderPolygonCentered);
+
+        // Resize the canvas when map2 resizes
+        map2.on('resize', () => {
+            canvas.width = map2.getContainer().offsetWidth;
+            canvas.height = map2.getContainer().offsetHeight;
+            renderPolygonCentered(); // Redraw after resizing
+        });
+
+
+
+
+        // Add a custom control to toggle satellite imagery
+        class SatelliteToggleControl {
+            onAdd(map) {
+                this.map = map;
+
+                // Create the container for the button
+                this.container = document.createElement('div');
+                this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group mapboxgl-ctrl-satellite';
+
+                // Create the button
+                this.button = document.createElement('button');
+                this.button.type = 'button';
+                this.button.className = 'mapbox-satellite-toggle';
+                this.button.title = '切换卫星图像';
+
+                // Use an emoji or SVG for the icon (e.g., 🛰️)
+                this.button.innerHTML = '🛰️';
+
+                // Add event listener to toggle styles
+                this.button.addEventListener('click', () => {
+                    const currentStyle = map1.getStyle().sprite; // Get current map style
+                    if (currentStyle.includes('satellite')) {
+                        this.switchToDefault();
+                    } else {
+                        this.switchToSatellite();
+                    }
+                });
+
+                // Append the button to the container
+                this.container.appendChild(this.button);
+
+                return this.container;
+            }
+
+            onRemove() {
+                this.container.parentNode.removeChild(this.container);
+                this.map = undefined;
+            }
+
+            // Switch both maps to satellite imagery
+            switchToSatellite() {
+                map1.setStyle('mapbox://styles/mapbox/satellite-v9');
+                map2.setStyle('mapbox://styles/mapbox/satellite-v9');
+            }
+
+            // Switch both maps to the default style
+            switchToDefault() {
+                map1.setStyle('mapbox://styles/mapbox/streets-v11');
+                map2.setStyle('mapbox://styles/mapbox/streets-v11');
+            }
+        }
+
+        // Add the custom control to both maps
+        const satelliteControl = new SatelliteToggleControl();
+        map1.addControl(satelliteControl, 'top-left');
+
+
+        // -------- WELCOME MODAL ----------
+
+        const modal = document.getElementById("welcomeModal");
+        const span = document.getElementsByClassName("close")[0];
+
+        // Close the modal when the user clicks on the close button
+        span.onclick = function () {
+            modal.style.display = "none";
+        };
+
+        // Also close the modal if the user clicks outside of it
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        };
+
+        // --------------POLYGON STATS ---------------
+        function updatePolygonStats() {
+            const features = draw.getAll(); // Get all drawn features
+            if (!features.features.length) {
+                // If no polygon exists, reset the stats
+                document.getElementById('perimeter').textContent = 'Perimeter: --';
+                document.getElementById('area').textContent = 'Area: --';
+                return;
+            }
+
+            const polygon = features.features[0]; // Use the first polygon
+            const coordinates = polygon.geometry.coordinates[0]; // Get the outer ring
+
+            // Ensure the polygon is valid and closed
+            if (coordinates[0][0] !== coordinates[coordinates.length - 1][0] ||
+                coordinates[0][1] !== coordinates[coordinates.length - 1][1]) {
+                coordinates.push(coordinates[0]); // Close the loop
+            }
+
+            // Calculate the perimeter
+            const lineString = turf.lineString(coordinates); // Convert to LineString
+            const perimeter = turf.length(lineString, { units: 'meters' }); // Perimeter in meters
+
+            // Calculate the area in square meters and convert to hectares
+            const areaInSquareMeters = turf.area(polygon);
+            const areaInHectares = areaInSquareMeters / 10000; // Convert to hectares
+
+            // Update the stats display
+            document.getElementById('perimeter').textContent = `周长: ${perimeter.toFixed(2)} 米`;
+            document.getElementById('area').textContent = `面积: ${areaInSquareMeters.toFixed(2)}平方米 或 ${areaInHectares.toFixed(2)} 公顷`;
+        }
+
+
+        // Attach the update function to draw events
+        map1.on('load', () => {
+            map1.on('draw.create', updatePolygonStats);
+            map1.on('draw.update', updatePolygonStats);
+            map1.on('draw.delete', updatePolygonStats);
+        });
+
+        // -------------/POLYGON STATS ---------------
+
+    </script>
+</body>
+
+</html>

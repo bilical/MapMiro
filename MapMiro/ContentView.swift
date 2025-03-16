@@ -185,26 +185,39 @@ class MapUtils {
     }
     
     // 创建相同形状的多边形，保持原始形状但移动到新的中心点
-    // 可以选择是否保持原始大小或根据面积比例缩放
+    // 使用第一个点作为参考点，而不是中心点，以保持形状完全一致
     static func createSameShapePolygon(originalPoints: [CLLocationCoordinate2D], newCenter: CLLocationCoordinate2D, scale: Double = 1.0) -> [CLLocationCoordinate2D] {
         // 如果点数量少于3个，则无法形成多边形
         guard originalPoints.count >= 3 else { return [] }
         
-        // 计算原始多边形的中心点
+        // 使用第一个点作为参考点
+        let referencePoint = originalPoints[0]
+        
+        // 计算原始多边形的中心点（仅用于确定新多边形的位置）
         let originalCenter = calculatePolygonCenter(originalPoints)
+        
+        // 计算参考点到中心点的偏移量
+        let refToCenterLatOffset = originalCenter.latitude - referencePoint.latitude
+        let refToCenterLonOffset = originalCenter.longitude - referencePoint.longitude
+        
+        // 计算新的参考点位置（使新多边形的中心位于newCenter）
+        let newReferencePoint = CLLocationCoordinate2D(
+            latitude: newCenter.latitude - refToCenterLatOffset,
+            longitude: newCenter.longitude - refToCenterLonOffset
+        )
         
         // 创建新的多边形点
         var newPoints: [CLLocationCoordinate2D] = []
         
-        // 对每个点进行平移和缩放
+        // 对每个点进行平移，保持相对于参考点的位置关系
         for point in originalPoints {
-            // 计算点相对于原始中心的偏移量（经度和纬度）
-            let latOffset = (point.latitude - originalCenter.latitude) * scale
-            let lonOffset = (point.longitude - originalCenter.longitude) * scale
+            // 计算点相对于参考点的偏移量
+            let latOffset = (point.latitude - referencePoint.latitude) * scale
+            let lonOffset = (point.longitude - referencePoint.longitude) * scale
             
-            // 将偏移量应用到新的中心点
-            let newLat = newCenter.latitude + latOffset
-            let newLon = newCenter.longitude + lonOffset
+            // 将偏移量应用到新的参考点
+            let newLat = newReferencePoint.latitude + latOffset
+            let newLon = newReferencePoint.longitude + lonOffset
             
             // 添加新的点
             newPoints.append(CLLocationCoordinate2D(latitude: newLat, longitude: newLon))
@@ -314,8 +327,15 @@ struct FixedPolygonOverlay: View {
         } else {
             // 绘制多边形
             Path { path in
-                // 计算多边形的中心点（仅用于定位，不用于形状计算）
+                // 计算多边形的中心点（仅用于定位多边形在屏幕中央）
                 let center = MapUtils.calculatePolygonCenter(points)
+                
+                // 使用第一个点作为参考点
+                let referencePoint = points[0]
+                
+                // 计算参考点到中心点的偏移量
+                let refToCenterLatOffset = center.latitude - referencePoint.latitude
+                let refToCenterLonOffset = center.longitude - referencePoint.longitude
                 
                 // 计算多边形的平均半径（简化处理）
                 var totalDistance: Double = 0
@@ -327,32 +347,30 @@ struct FixedPolygonOverlay: View {
                 let avgRadius = totalDistance / Double(points.count)
                 
                 // 计算固定的缩放比例，不考虑地图的缩放级别
-                // 这样可以确保多边形大小不随地图缩放而变化
                 let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius
                 
-                // 计算第一个点相对于中心的偏移量
-                let firstPoint = points[0]
-                let firstLatOffset = firstPoint.latitude - center.latitude
-                let firstLonOffset = firstPoint.longitude - center.longitude
+                // 计算屏幕中心点
+                let screenCenterX = mapSize.width / 2
+                let screenCenterY = mapSize.height / 2
                 
-                // 计算第一个点在屏幕上的位置
-                let firstX = mapSize.width / 2 + firstLonOffset * scale
-                let firstY = mapSize.height / 2 - firstLatOffset * scale
+                // 计算参考点在屏幕上的位置（使多边形中心位于屏幕中央）
+                let referenceX = screenCenterX - refToCenterLonOffset * scale
+                let referenceY = screenCenterY + refToCenterLatOffset * scale
                 
-                // 移动到第一个点
-                path.move(to: CGPoint(x: firstX, y: firstY))
+                // 移动到第一个点（参考点）
+                path.move(to: CGPoint(x: referenceX, y: referenceY))
                 
                 // 连接其余的点
                 for i in 1..<points.count {
                     let point = points[i]
                     
-                    // 计算相对于中心点的偏移
-                    let latOffset = point.latitude - center.latitude
-                    let lonOffset = point.longitude - center.longitude
+                    // 计算点相对于参考点的偏移量
+                    let latOffset = point.latitude - referencePoint.latitude
+                    let lonOffset = point.longitude - referencePoint.longitude
                     
-                    // 缩放并平移到地图中心
-                    let x = mapSize.width / 2 + lonOffset * scale
-                    let y = mapSize.height / 2 - latOffset * scale
+                    // 计算点在屏幕上的位置
+                    let x = referenceX + lonOffset * scale
+                    let y = referenceY - latOffset * scale
                     
                     path.addLine(to: CGPoint(x: x, y: y))
                 }
@@ -363,8 +381,15 @@ struct FixedPolygonOverlay: View {
             .fill(fillColor)
             .overlay(
                 Path { path in
-                    // 计算多边形的中心点（仅用于定位，不用于形状计算）
+                    // 计算多边形的中心点（仅用于定位多边形在屏幕中央）
                     let center = MapUtils.calculatePolygonCenter(points)
+                    
+                    // 使用第一个点作为参考点
+                    let referencePoint = points[0]
+                    
+                    // 计算参考点到中心点的偏移量
+                    let refToCenterLatOffset = center.latitude - referencePoint.latitude
+                    let refToCenterLonOffset = center.longitude - referencePoint.longitude
                     
                     // 计算多边形的平均半径（简化处理）
                     var totalDistance: Double = 0
@@ -376,32 +401,30 @@ struct FixedPolygonOverlay: View {
                     let avgRadius = totalDistance / Double(points.count)
                     
                     // 计算固定的缩放比例，不考虑地图的缩放级别
-                    // 这样可以确保多边形大小不随地图缩放而变化
                     let scale = min(mapSize.width, mapSize.height) * 0.4 / avgRadius
                     
-                    // 计算第一个点相对于中心的偏移量
-                    let firstPoint = points[0]
-                    let firstLatOffset = firstPoint.latitude - center.latitude
-                    let firstLonOffset = firstPoint.longitude - center.longitude
+                    // 计算屏幕中心点
+                    let screenCenterX = mapSize.width / 2
+                    let screenCenterY = mapSize.height / 2
                     
-                    // 计算第一个点在屏幕上的位置
-                    let firstX = mapSize.width / 2 + firstLonOffset * scale
-                    let firstY = mapSize.height / 2 - firstLatOffset * scale
+                    // 计算参考点在屏幕上的位置（使多边形中心位于屏幕中央）
+                    let referenceX = screenCenterX - refToCenterLonOffset * scale
+                    let referenceY = screenCenterY + refToCenterLatOffset * scale
                     
-                    // 移动到第一个点
-                    path.move(to: CGPoint(x: firstX, y: firstY))
+                    // 移动到第一个点（参考点）
+                    path.move(to: CGPoint(x: referenceX, y: referenceY))
                     
                     // 连接其余的点
                     for i in 1..<points.count {
                         let point = points[i]
                         
-                        // 计算相对于中心点的偏移
-                        let latOffset = point.latitude - center.latitude
-                        let lonOffset = point.longitude - center.longitude
+                        // 计算点相对于参考点的偏移量
+                        let latOffset = point.latitude - referencePoint.latitude
+                        let lonOffset = point.longitude - referencePoint.longitude
                         
-                        // 缩放并平移到地图中心
-                        let x = mapSize.width / 2 + lonOffset * scale
-                        let y = mapSize.height / 2 - latOffset * scale
+                        // 计算点在屏幕上的位置
+                        let x = referenceX + lonOffset * scale
+                        let y = referenceY - latOffset * scale
                         
                         path.addLine(to: CGPoint(x: x, y: y))
                     }
@@ -497,7 +520,7 @@ struct ContentView: View {
                         .onAppear {
                             topMapSize = mapGeometry.size
                         }
-                        .onChange(of: mapGeometry.size) { newSize in
+                        .onChange(of: mapGeometry.size) { _, newSize in
                             topMapSize = newSize
                         }
                         .onMapCameraChange { context in
@@ -648,7 +671,7 @@ struct ContentView: View {
                             // 保存初始中心点
                             bottomMapInitialCenter = bottomRegion.center
                         }
-                        .onChange(of: mapGeometry.size) { newSize in
+                        .onChange(of: mapGeometry.size) { _, newSize in
                             bottomMapSize = newSize
                         }
                         // 使用id修饰符来监听地图缩放级别变化
