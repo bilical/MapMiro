@@ -323,9 +323,12 @@ struct FixedPolygonOverlay: View {
         let latitudeDelta = mapSpan.latitudeDelta
         let longitudeDelta = mapSpan.longitudeDelta
         
+        // 计算多边形中心点
+        let center = MapUtils.calculatePolygonCenter(points)
+        
         // 将坐标转换为相对于地图中心的偏移量（-1到1的范围）
-        let x = (coordinate.longitude - (points[0].longitude - longitudeDelta / 2)) / longitudeDelta
-        let y = (coordinate.latitude - (points[0].latitude - latitudeDelta / 2)) / latitudeDelta
+        let x = (coordinate.longitude - center.longitude) / longitudeDelta + 0.5
+        let y = (coordinate.latitude - center.latitude) / latitudeDelta + 0.5
         
         // 转换为屏幕坐标
         return CGPoint(
@@ -343,30 +346,12 @@ struct FixedPolygonOverlay: View {
             Path { path in
                 // 将第一个点投影到屏幕空间
                 let firstPoint = projectToScreen(points[0])
-                
-                // 计算屏幕中心
-                let screenCenter = CGPoint(x: mapSize.width / 2, y: mapSize.height / 2)
-                
-                // 计算第一个点相对于屏幕中心的偏移
-                let firstOffsetX = firstPoint.x - screenCenter.x
-                let firstOffsetY = firstPoint.y - screenCenter.y
-                
-                // 移动到第一个点
-                path.move(to: CGPoint(
-                    x: screenCenter.x + firstOffsetX,
-                    y: screenCenter.y + firstOffsetY
-                ))
+                path.move(to: firstPoint)
                 
                 // 连接其余的点
                 for i in 1..<points.count {
                     let point = projectToScreen(points[i])
-                    let offsetX = point.x - screenCenter.x
-                    let offsetY = point.y - screenCenter.y
-                    
-                    path.addLine(to: CGPoint(
-                        x: screenCenter.x + offsetX,
-                        y: screenCenter.y + offsetY
-                    ))
+                    path.addLine(to: point)
                 }
                 
                 // 闭合路径
@@ -377,30 +362,12 @@ struct FixedPolygonOverlay: View {
                 Path { path in
                     // 将第一个点投影到屏幕空间
                     let firstPoint = projectToScreen(points[0])
-                    
-                    // 计算屏幕中心
-                    let screenCenter = CGPoint(x: mapSize.width / 2, y: mapSize.height / 2)
-                    
-                    // 计算第一个点相对于屏幕中心的偏移
-                    let firstOffsetX = firstPoint.x - screenCenter.x
-                    let firstOffsetY = firstPoint.y - screenCenter.y
-                    
-                    // 移动到第一个点
-                    path.move(to: CGPoint(
-                        x: screenCenter.x + firstOffsetX,
-                        y: screenCenter.y + firstOffsetY
-                    ))
+                    path.move(to: firstPoint)
                     
                     // 连接其余的点
                     for i in 1..<points.count {
                         let point = projectToScreen(points[i])
-                        let offsetX = point.x - screenCenter.x
-                        let offsetY = point.y - screenCenter.y
-                        
-                        path.addLine(to: CGPoint(
-                            x: screenCenter.x + offsetX,
-                            y: screenCenter.y + offsetY
-                        ))
+                        path.addLine(to: point)
                     }
                     
                     // 闭合路径
@@ -421,7 +388,7 @@ struct ContentView: View {
     
     // 状态变量，用于存储下方地图的区域
     @State private var bottomRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074), // 北京坐标
+        center: CLLocationCoordinate2D(latitude: 31.2397, longitude: 121.4998), // 上海东方明珠坐标
         //center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), // 纽约坐标
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
