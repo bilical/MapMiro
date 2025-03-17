@@ -682,11 +682,22 @@ struct MapView: View {
                                 topMapSize = newSize
                             }
                             .onMapCameraChange { context in
+                                // 保存当前多边形的实际坐标
+                                let originalPoints = drawnPoints
+                                
                                 // 更新topRegion以反映地图的当前位置
                                 topRegion = MKCoordinateRegion(
                                     center: context.region.center,
                                     span: context.region.span
                                 )
+                                
+                                // 确保多边形保持原始坐标，不随地图缩放而改变
+                                if !originalPoints.isEmpty {
+                                    drawnPoints = originalPoints
+                                }
+                                
+                                // 不要在这里更新多边形，让多边形保持原始大小
+                                // 多边形应该随地图缩放而显示，但不改变其实际大小
                             }
                             
                             // 绘制多边形
@@ -754,17 +765,21 @@ struct MapView: View {
                     ZoomButtons(
                         onZoomIn: {
                             // 放大地图（减小span值）
-                            topRegion.span = MKCoordinateSpan(
+                            var newSpan = MKCoordinateSpan(
                                 latitudeDelta: max(topRegion.span.latitudeDelta * 0.5, 0.001),
                                 longitudeDelta: max(topRegion.span.longitudeDelta * 0.5, 0.001)
                             )
+                            // 只更新地图的span，不触发多边形更新
+                            topRegion.span = newSpan
                         },
                         onZoomOut: {
                             // 缩小地图（增加span值）
-                            topRegion.span = MKCoordinateSpan(
+                            var newSpan = MKCoordinateSpan(
                                 latitudeDelta: min(topRegion.span.latitudeDelta * 2.0, 180.0),
                                 longitudeDelta: min(topRegion.span.longitudeDelta * 2.0, 180.0)
                             )
+                            // 只更新地图的span，不触发多边形更新
+                            topRegion.span = newSpan
                         }
                     )
                     .position(x: topMapSize.width - 50, y: topMapSize.height - 50)
@@ -915,8 +930,8 @@ struct MapView: View {
                 // 底部信息栏
                 HStack {
                     HStack(spacing: 8) {
-                        //Text("面积: \(MapUtils.formatArea(calculatedArea))")
-                        //    .font(.caption)
+                        Text("面积: \(MapUtils.formatArea(calculatedArea))")
+                            .font(.caption)
                         if drawnPoints.count >= 2 {
                             Text("周长: \(MapUtils.formatLength(MapUtils.calculatePolygonPerimeter(drawnPoints)))")
                                 .font(.caption)
