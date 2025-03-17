@@ -163,7 +163,7 @@ class MapUtils {
         // 使用球面多边形公式计算
         for i in 0..<n {
             let j = (i + 1) % n
-            let k = (i + 2) % n
+            _ = (i + 2) % n
             
             let a = radianCoordinates[i]
             let b = radianCoordinates[j]
@@ -765,7 +765,7 @@ struct MapView: View {
                     ZoomButtons(
                         onZoomIn: {
                             // 放大地图（减小span值）
-                            var newSpan = MKCoordinateSpan(
+                            let newSpan = MKCoordinateSpan(
                                 latitudeDelta: max(topRegion.span.latitudeDelta * 0.5, 0.001),
                                 longitudeDelta: max(topRegion.span.longitudeDelta * 0.5, 0.001)
                             )
@@ -774,7 +774,7 @@ struct MapView: View {
                         },
                         onZoomOut: {
                             // 缩小地图（增加span值）
-                            var newSpan = MKCoordinateSpan(
+                            let newSpan = MKCoordinateSpan(
                                 latitudeDelta: min(topRegion.span.latitudeDelta * 2.0, 180.0),
                                 longitudeDelta: min(topRegion.span.longitudeDelta * 2.0, 180.0)
                             )
